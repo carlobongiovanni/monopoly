@@ -4,8 +4,11 @@
 # ]
 # ///
 
-import sys, random, logging, time
-from panda3d.core import CardMaker, ScissorAttrib, TextNode, LColor, TexGenAttrib, TextureStage
+import sys
+import random
+import logging
+import asyncio
+from panda3d.core import CardMaker, ScissorAttrib, TextNode, LColor, TexGenAttrib, TextureStage, loadPrcFileData
 from direct.gui.OnscreenText import OnscreenText
 from direct.gui.DirectGui import (
     DirectFrame, DirectLabel, DirectEntry, DirectButton
@@ -14,7 +17,6 @@ from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from direct.interval.IntervalGlobal import Sequence, Wait, Func, LerpPosInterval
 from direct.fsm.FSM import FSM
-from panda3d.core import loadPrcFileData
 
 # tell Panda to make a 1024×600 window, windowed (not fullscreen)
 loadPrcFileData("", """
@@ -595,9 +597,9 @@ class TwoPlayerScroll(ShowBase, FSM):
                 r.setScale(1,1,1)
             self.rects_left[i1].setScale(1.2,1,1.2)
 
-def main():
+async def main():
     app = TwoPlayerScroll()
     app.run()
 
 if __name__=="__main__":
-    main()
+    asyncio.run( main() ) # this is asyncronously running main.
