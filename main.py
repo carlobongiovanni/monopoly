@@ -401,7 +401,7 @@ class TwoPlayerScroll(ShowBase, FSM):
         self.move_player1()
 
         # should check for victory before going to ai turn
-        self.taskMgr.doMethodLater(5, self._gotoPlayGame, "gotoPlayGame")
+        self.taskMgr.doMethodLater(4, self._gotoPlayGame, "gotoPlayGame")
 
     def _gotoPlayGame(self, task):
         self.request("PlayGame")
