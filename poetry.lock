@@ -113,5 +113,5 @@ sim = ["aioconsole", "aiohttp", "asyncio-socks-server"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = "^3.10"
-content-hash = "fe31f9c6f235ffa7c09cf1999ced0c330826f39b29ed1120756aa05f061a2604"
+python-versions = "^3.12"
+content-hash = "83957da0489803cc43e19b20e453d3d50f90327dbfa11a1d53fb6d1d0d3ef41e"

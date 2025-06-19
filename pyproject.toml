@@ -6,7 +6,7 @@ authors = [
     {name = "Carlo Bongiovanni",email = "carlo.bongiovanni@ibm.com"}
 ]
 readme = "README.md"
-requires-python = "^3.10"
+requires-python = "^3.12"
 dependencies = [
     "panda3d (>=1.10.15,<2.0.0)",
     "pygbag (>=0.9.2,<0.10.0)"

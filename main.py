@@ -203,10 +203,11 @@ class TwoPlayerScroll(ShowBase, FSM):
             )
             self.rects_right.append(node2)
 
-        # self.accept("arrow_left",  self.move1, [-1])
-        # self.accept("arrow_right", self.move1, [+1])
-        # self.accept("a",  self.move2, [-1])
-        # self.accept("d", self.move2, [+1])
+        logging.info(len(self.monopoly_map))
+        self.accept("arrow_left",  self.move1, [-1])
+        self.accept("arrow_right", self.move1, [+1])
+        self.accept("a",  self.move2, [-1])
+        self.accept("d", self.move2, [+1])
 
     def setup_dices(self, nodename):
         """adds the dices to the bg_scoring"""
