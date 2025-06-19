@@ -1,3 +1,9 @@
+# /// script
+# dependencies = [
+#   "panda3d",
+# ]
+# ///
+
 import sys, random, logging, time
 from panda3d.core import CardMaker, ScissorAttrib, TextNode, LColor, TexGenAttrib, TextureStage
 from direct.gui.OnscreenText import OnscreenText
@@ -8,6 +14,15 @@ from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from direct.interval.IntervalGlobal import Sequence, Wait, Func, LerpPosInterval
 from direct.fsm.FSM import FSM
+from panda3d.core import loadPrcFileData
+
+# tell Panda to make a 1024×600 window, windowed (not fullscreen)
+loadPrcFileData("", """
+    win-size 1024 600
+    fullscreen 0
+    show-frame-rate-meter 0
+""")
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -580,6 +595,9 @@ class TwoPlayerScroll(ShowBase, FSM):
                 r.setScale(1,1,1)
             self.rects_left[i1].setScale(1.2,1,1.2)
 
+def main():
+    app = TwoPlayerScroll()
+    app.run()
 
-app = TwoPlayerScroll()
-app.run()
+if __name__=="__main__":
+    main()

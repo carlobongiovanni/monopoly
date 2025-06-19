@@ -96,7 +96,22 @@ files = [
     {file = "panda3d-1.10.15-cp39-cp39-win_amd64.whl", hash = "sha256:0e86170e57b77ab76244e2d7ff0749343956d71815af64a4863bcae702bf88b5"},
 ]
 
+[[package]]
+name = "pygbag"
+version = "0.9.2"
+description = "package and run python/pygame-ce wasm (and more) directly in modern web browsers."
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "pygbag-0.9.2-py3-none-any.whl", hash = "sha256:3a60a80cc28ed21e3d5d98c08a5d8f857911e38e411b6e590ba640158e8656c1"},
+    {file = "pygbag-0.9.2.tar.gz", hash = "sha256:0e31860742a8ba9c527135cbb6d64f6d7d8d7b23b71ee87a15f1de9474690c25"},
+]
+
+[package.extras]
+sim = ["aioconsole", "aiohttp", "asyncio-socks-server"]
+
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "c86d4cf0bcf4ae012476ee664d2c0bb748c01b26e22ab20f3f66edfb125a9776"
+content-hash = "fe31f9c6f235ffa7c09cf1999ced0c330826f39b29ed1120756aa05f061a2604"
