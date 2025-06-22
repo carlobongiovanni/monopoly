@@ -8,6 +8,7 @@ import sys
 import random
 import logging
 import asyncio
+import os
 from panda3d.core import CardMaker, ScissorAttrib, TextNode, LColor, TexGenAttrib, TextureStage, loadPrcFileData
 from direct.gui.OnscreenText import OnscreenText
 from direct.gui.DirectGui import (
@@ -17,6 +18,10 @@ from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from direct.interval.IntervalGlobal import Sequence, Wait, Func, LerpPosInterval
 from direct.fsm.FSM import FSM
+from dotenv import load_dotenv
+load_dotenv()
+
+DEBUG = os.getenv("DEBUG")
 
 # tell Panda to make a 1024×600 window, windowed (not fullscreen)
 loadPrcFileData("", """
@@ -42,9 +47,8 @@ class TwoPlayerScroll(ShowBase, FSM):
         self.scroll_speed   = 1         # slots per second when holding key
         # this is played by the real player
         self.player1_name   = "Alice"
-        # this is played by the clever AI
-        self.player2_name   = "Bob"
-        self.playing_height = 0.8
+        self.content_pane_top = 0.8
+        self.content_pane_bottom = -0.6
 
         self.left_lane = None
         self.right_lane = None
@@ -56,6 +60,8 @@ class TwoPlayerScroll(ShowBase, FSM):
         self.index1       = 0   # player1 on right
         self.index2       = 0   # player2 on left
         self.guide_text = None
+        self.inventory_left_text = None
+        self.inventory_right_text = None
 
         # dices
         self.dice = []
@@ -72,7 +78,14 @@ class TwoPlayerScroll(ShowBase, FSM):
         # which actor is in charge of action now
         self.actor = "human"
 
-        self.request("Idle")
+        # debug will to skip setup - set debug as env variable
+        self.debug = bool(DEBUG)
+
+        if self.debug:
+            self.accept("escape", sys.exit)
+            self._on_start_pressed()
+        else:
+            self.request("Idle")
 
     def _debug_node(self, node):
         """helper to understand WTF I did"""
@@ -87,32 +100,56 @@ class TwoPlayerScroll(ShowBase, FSM):
             self.aspect2d,
             -self.getAspectRatio(),
             0.0,
-            -1,
-            self.playing_height,
+            self.content_pane_bottom,
+            self.content_pane_top,
             (0.1, 0.1, 0.5, 1)
-        )  # Dark blue
+        )
+
+        bg_inventory_left  = self.create_background(
+            "bg_inventory_left", 
+            self.aspect2d,
+            -self.getAspectRatio(),
+            0.0,
+            -1,
+            self.content_pane_bottom,
+            (0, 0, 0, 1)
+        )
+        bg_inventory_left.clearColor()
+
         bg_right = self.create_background(
             "bg_right", 
             self.aspect2d,
             0.0,
             self.getAspectRatio(),
-            -1,
-            self.playing_height,
+            self.content_pane_bottom,
+            self.content_pane_top,
             (0.5, 0.1, 0.1, 1)
-        )  # Dark red
+        )
+
+        bg_inventory_right  = self.create_background(
+            "bg_inventory_right", 
+            self.aspect2d,
+            0.0,
+            self.getAspectRatio(),
+            -1,
+            self.content_pane_bottom,
+            (0, 0, 0, 1)
+        )
+        bg_inventory_right.clearColor()
+
         bg_scoring = self.create_background(
             "bg_scoring", 
             self.aspect2d,
             -self.getAspectRatio(),
             self.getAspectRatio(),
-            self.playing_height,
+            self.content_pane_top,
             1,
             (0, 0, 0, 1)
         )
 
         # Create a middle divider
         divider = CardMaker("divider")
-        divider.setFrame(-0.01, 0.01, -1, self.playing_height)
+        divider.setFrame(-0.01, 0.01, -1, self.content_pane_top)
         divider_node = self.aspect2d.attachNewNode(divider.generate())
         divider_node.setColor(0, 0, 0, 1)
         divider_node.setX(0)
@@ -127,6 +164,26 @@ class TwoPlayerScroll(ShowBase, FSM):
             scale=.1,
             fg=(0, 0, 0, 1),
             parent=bg_scoring,  # Attach to the rectangle
+            align=TextNode.ACenter
+        )
+
+        # textnode for inventory left
+        self.inventory_left_text = OnscreenText(
+            text="INVENTORY LEFT PLAYER",
+            pos=(-self.getAspectRatio() + .7, self.content_pane_bottom - 0.25),
+            scale=.1,
+            fg=(0, 0, 0, 1),
+            parent=bg_inventory_left,  # Attach to the rectangle
+            align=TextNode.ACenter
+        )
+
+        # textnode for inventory right
+        self.inventory_right_text = OnscreenText(
+            text="INVENTORY RIGHT PLAYER",
+            pos=(.7, self.content_pane_bottom - 0.25),
+            scale=.1,
+            fg=(0, 0, 0, 1),
+            parent=bg_inventory_right,  # Attach to the rectangle
             align=TextNode.ACenter
         )
 
@@ -152,10 +209,6 @@ class TwoPlayerScroll(ShowBase, FSM):
                                1.0)
         )
 
-        for lane, x in ((self.left_lane, -0.5),(self.right_lane, +0.5)):
-            lane.setScale(0.5,1,1)
-            lane.setX(x)
-
         self.left_lane.setScale(0.5, 1, 1)
         self.left_lane.setX(-0.5)
         self.right_lane.setScale(0.5, 1, 1)
@@ -163,6 +216,7 @@ class TwoPlayerScroll(ShowBase, FSM):
 
         # each lane gets a “content” NodePath under which we create ALL cards
         self.left_content  = self.left_lane.attachNewNode("left_content")
+
         self.right_content = self.right_lane.attachNewNode("right_content")
 
         # compute the slot width so exactly visible_slots fill –1→+1
@@ -175,7 +229,8 @@ class TwoPlayerScroll(ShowBase, FSM):
             cm = CardMaker(f"L{i}")
             cm.setFrame(-width/2, +width/2, -self.card_height/2, +self.card_height/2)
             node = self.left_content.attachNewNode(cm.generate())
-            node.setX(-self.getAspectRatio() + 0.1 + width/2 + i*width)
+            node.setX(-self.getAspectRatio() - 0.5 + width/2 + i*width)
+            node.setZ(0.1)
             node.setColor(self.generate_color_from_map(v))
             text = OnscreenText(
                 text=str(v),  # Rectangle number
@@ -191,7 +246,8 @@ class TwoPlayerScroll(ShowBase, FSM):
             cm2 = CardMaker(f"R{i}")
             cm2.setFrame(-width/2, +width/2, -self.card_height/2, +self.card_height/2)
             node2 = self.right_content.attachNewNode(cm2.generate())
-            node2.setX(-0.7 + width/2 + i*width)
+            node2.setX(-0.75 + width/2 + i*width)
+            node2.setZ(0.1)
             node2.setColor(self.generate_color_from_map(v))
             text2 = OnscreenText(
                 text=str(v),  # Rectangle number
@@ -203,7 +259,7 @@ class TwoPlayerScroll(ShowBase, FSM):
             )
             self.rects_right.append(node2)
 
-        logging.info(len(self.monopoly_map))
+
         self.accept("arrow_left",  self.move1, [-1])
         self.accept("arrow_right", self.move1, [+1])
         self.accept("a",  self.move2, [-1])
