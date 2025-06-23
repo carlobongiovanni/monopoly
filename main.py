@@ -30,10 +30,12 @@ loadPrcFileData("", """
     show-frame-rate-meter 0
 """)
 
-
 logging.basicConfig(level=logging.INFO)
 
-class TwoPlayerScroll(ShowBase, FSM):
+import os
+print(os.environ.get("DEBUG"))
+
+class Monopoly2d(ShowBase, FSM):
     def __init__(self):
         super().__init__()
         FSM.__init__(self, "GameFSM")
@@ -78,13 +80,19 @@ class TwoPlayerScroll(ShowBase, FSM):
         # which actor is in charge of action now
         self.actor = "human"
 
+        # inventory storage
+        self.human_inventory = {}
+        self.bot_inventory = {}
+
         # debug will to skip setup - set debug as env variable
         self.debug = bool(DEBUG)
 
         if self.debug:
+            logging.info("Debug ACTIVE")
             self.accept("escape", sys.exit)
             self._on_start_pressed()
         else:
+            logging.info("Debug UNACTIVE")
             self.request("Idle")
 
     def _debug_node(self, node):
@@ -174,17 +182,17 @@ class TwoPlayerScroll(ShowBase, FSM):
             scale=.1,
             fg=(0, 0, 0, 1),
             parent=bg_inventory_left,  # Attach to the rectangle
-            align=TextNode.ACenter
+            align=TextNode.ALeft
         )
 
         # textnode for inventory right
         self.inventory_right_text = OnscreenText(
             text="INVENTORY RIGHT PLAYER",
-            pos=(.7, self.content_pane_bottom - 0.25),
+            pos=(.4, self.content_pane_bottom - 0.25),
             scale=.1,
             fg=(0, 0, 0, 1),
             parent=bg_inventory_right,  # Attach to the rectangle
-            align=TextNode.ACenter
+            align=TextNode.ALeft
         )
 
         # generate the map of the game
@@ -259,11 +267,56 @@ class TwoPlayerScroll(ShowBase, FSM):
             )
             self.rects_right.append(node2)
 
+        # prepares inventory
+        self.prepare_inventory()
+        self.draw_inventory()
 
         self.accept("arrow_left",  self.move1, [-1])
         self.accept("arrow_right", self.move1, [+1])
         self.accept("a",  self.move2, [-1])
         self.accept("d", self.move2, [+1])
+
+    def draw_inventory(self):
+        """draws the inventory adding initial power and gold"""
+        human_gold = self.human_inventory.get("money", 0)
+        bot_gold = self.human_inventory.get("money", 0)
+        human_power = self.human_inventory.get("power", "")
+        bot_power = self.bot_inventory.get("power", "")
+        human_message = f"Gold: {human_gold} $\nPower: {human_power}"
+        bot_message = f"Gold: {bot_gold} $\nPower: {bot_power}"
+        self.update_inventory("human", human_message)
+        self.update_inventory("bot", bot_message)
+
+    def update_inventory(self, target, message):
+        """updates the inventory"""
+        if target == "bot":
+            self.inventory_left_text.setText(message)
+        elif target == "human":
+            self.inventory_right_text.setText(message)
+
+        self.guide_text.setText(message)
+
+    def prepare_inventory(self):
+        """inventory is prepared with starting money and random powers"""
+        # set power
+        powers = ["cheaper_upgrades", "bonus"]
+        human_power = random.choice(powers)
+        powers.remove(human_power)
+        bot_power = powers[0]
+
+        # set starting money
+        starting_money = 100
+        self.human_inventory = {
+            "power": human_power,
+            "money": starting_money,
+            "cards": [{}]
+        }
+        self.bot_inventory = {
+            "power": bot_power,
+            "money": starting_money,
+            "cards": [{}]
+        }
+
 
     def setup_dices(self, nodename):
         """adds the dices to the bg_scoring"""
@@ -387,7 +440,7 @@ class TwoPlayerScroll(ShowBase, FSM):
                 message = "Press enter to play..."
             elif role == "dice_result":
                 message = f"you rolled {self.value_dice_1} and {self.value_dice_2}, that makes {self.value_dice_1+self.value_dice_2}"
-        elif self.actor == "computer":
+        elif self.actor == "bot":
             if role == "start":
                 message = "Now it's my turn! let me think..."
             elif role == "dice_result":
@@ -405,7 +458,7 @@ class TwoPlayerScroll(ShowBase, FSM):
 
         if self.actor == "human":
             self.accept("enter", self.request, ["RollDice"])
-        elif self.actor == "computer":
+        elif self.actor == "bot":
             self.taskMgr.doMethodLater(
                 0,
                 self.enterRollDice,
@@ -467,7 +520,7 @@ class TwoPlayerScroll(ShowBase, FSM):
         """switch condition"""
 
         if self.actor == "human":
-            self.actor = "computer"
+            self.actor = "bot"
         else:
             self.actor = "human"
 
@@ -655,7 +708,7 @@ class TwoPlayerScroll(ShowBase, FSM):
             self.rects_left[i1].setScale(1.2,1,1.2)
 
 async def main():
-    app = TwoPlayerScroll()
+    app = Monopoly2d()
     app.run()
 
 if __name__=="__main__":
