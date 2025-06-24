@@ -18,10 +18,8 @@ from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from direct.interval.IntervalGlobal import Sequence, Wait, Func, LerpPosInterval
 from direct.fsm.FSM import FSM
-from dotenv import load_dotenv
-load_dotenv()
 
-DEBUG = os.getenv("DEBUG")
+DEBUG = os.environ.get("DEBUG")
 
 # tell Panda to make a 1024×600 window, windowed (not fullscreen)
 loadPrcFileData("", """
@@ -32,7 +30,6 @@ loadPrcFileData("", """
 
 logging.basicConfig(level=logging.INFO)
 
-import os
 print(os.environ.get("DEBUG"))
 
 class Monopoly2d(ShowBase, FSM):
@@ -178,7 +175,7 @@ class Monopoly2d(ShowBase, FSM):
         # textnode for inventory left
         self.inventory_left_text = OnscreenText(
             text="INVENTORY LEFT PLAYER",
-            pos=(-self.getAspectRatio() + .7, self.content_pane_bottom - 0.25),
+            pos=(-self.getAspectRatio() + .05, self.content_pane_bottom - 0.1),
             scale=.1,
             fg=(0, 0, 0, 1),
             parent=bg_inventory_left,  # Attach to the rectangle
@@ -188,7 +185,7 @@ class Monopoly2d(ShowBase, FSM):
         # textnode for inventory right
         self.inventory_right_text = OnscreenText(
             text="INVENTORY RIGHT PLAYER",
-            pos=(.4, self.content_pane_bottom - 0.25),
+            pos=(.05, self.content_pane_bottom - 0.1),
             scale=.1,
             fg=(0, 0, 0, 1),
             parent=bg_inventory_right,  # Attach to the rectangle
@@ -657,9 +654,22 @@ class Monopoly2d(ShowBase, FSM):
 
     def smooth_variant_move1(self, delta):
         # compute old & new indices
-        old_index = self.index1
-        new_index = (old_index + delta) % self.count_monopoly_cards
-        self.index1 = new_index
+        selected_node_path = None
+
+        if self.actor == "human":
+            old_index = self.index1
+            new_index = (old_index + delta) % self.count_monopoly_cards
+            self.index1 = new_index
+
+            selected_node_path = self.right_content
+
+        elif self.actor == "bot":
+            old_index = self.index2
+            new_index = (old_index + delta) % self.count_monopoly_cards
+            self.index2 = new_index
+
+            selected_node_path = self.left_content
+
 
         # figure out the scroll‐offset before & after, exactly as in _update_right_view()
         half   = self.visible_slots // 2
@@ -669,14 +679,9 @@ class Monopoly2d(ShowBase, FSM):
         x_old = -start_old * width
         x_new = -start_new * width
 
-        if self.actor == "human":
-            selectedNodePath = self.right_content
-        else:
-            selectedNodePath = self.left_content
-
         # build a 0.5s slide from x_old→x_new, then re‐highlight the cards
         slide = LerpPosInterval(
-            nodePath = selectedNodePath,
+            nodePath = selected_node_path,
             duration = 0.9,               # tweak for faster/slower
             pos      = (x_new, 0, 0),
             startPos = (x_old, 0, 0),
