@@ -9,7 +9,7 @@ import random
 import logging
 import asyncio
 import os
-from panda3d.core import CardMaker, ScissorAttrib, TextNode, LColor, TexGenAttrib, TextureStage, loadPrcFileData
+from panda3d.core import CardMaker, ScissorAttrib, TextNode, LColor, TexGenAttrib, TextureStage, loadPrcFileData, LPoint3f
 from direct.gui.OnscreenText import OnscreenText
 from direct.gui.DirectGui import (
     DirectFrame, DirectLabel, DirectEntry, DirectButton
@@ -18,6 +18,7 @@ from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from direct.interval.IntervalGlobal import Sequence, Wait, Func, LerpPosInterval
 from direct.fsm.FSM import FSM
+from action_card_popup import ActionCardPopup
 
 DEBUG = os.environ.get("DEBUG")
 
@@ -29,8 +30,6 @@ loadPrcFileData("", """
 """)
 
 logging.basicConfig(level=logging.INFO)
-
-print(os.environ.get("DEBUG"))
 
 class Monopoly2d(ShowBase, FSM):
     def __init__(self):
@@ -80,6 +79,16 @@ class Monopoly2d(ShowBase, FSM):
         # inventory storage
         self.human_inventory = {}
         self.bot_inventory = {}
+
+        # powers
+        self.powers = ["cheaper_upgrades", "bonus"]
+        # 10% discount
+        self.power_cheaper_upgrades = 10
+        # 30 $
+        self.power_bonus = 30
+
+        # popup
+        self.popup = None
 
         # debug will to skip setup - set debug as env variable
         self.debug = bool(DEBUG)
@@ -291,12 +300,10 @@ class Monopoly2d(ShowBase, FSM):
         elif target == "human":
             self.inventory_right_text.setText(message)
 
-        self.guide_text.setText(message)
-
     def prepare_inventory(self):
         """inventory is prepared with starting money and random powers"""
         # set power
-        powers = ["cheaper_upgrades", "bonus"]
+        powers = self.powers
         human_power = random.choice(powers)
         powers.remove(human_power)
         bot_power = powers[0]
@@ -428,7 +435,7 @@ class Monopoly2d(ShowBase, FSM):
         self._build_game()
         self.request("PlayGame")
 
-    def update_guide_text(self, role):
+    def update_guide_text(self, role, target=None):
         """displays the message in the bg_scoring according to the game state"""
         message = "error"
         
@@ -443,6 +450,12 @@ class Monopoly2d(ShowBase, FSM):
             elif role == "dice_result":
                 message = f"What? Only {self.value_dice_1} and {self.value_dice_2}? You cheater.."
 
+        if role == "loss":
+            if target == "human":
+                message = "You lost! Fancy a new game?"
+            elif target == "bot":
+                message = "I lost! It never happened in my life!"
+
         logging.info(f"{self.actor} says: {message}")
 
         self.guide_text.setText(message)
@@ -453,6 +466,17 @@ class Monopoly2d(ShowBase, FSM):
         logging.info(f"enter PlayGame for {self.actor}")
         self.update_guide_text(role="start")
 
+        if self.debug:
+            logging.info("Debug Jump to RollDice")
+            self.taskMgr.doMethodLater(
+                0,
+                self.enterRollDice,
+                "humanRollNow"
+            )
+
+        self.check_victory()
+        self.check_powers()
+
         if self.actor == "human":
             self.accept("enter", self.request, ["RollDice"])
         elif self.actor == "bot":
@@ -461,6 +485,49 @@ class Monopoly2d(ShowBase, FSM):
                 self.enterRollDice,
                 "aiRollNow"
             )
+
+    def check_powers(self):
+        """We check powers to know if we need to update inventory"""
+
+        if self.actor == "human":
+            human_power = self.human_inventory.get("power", "")
+            if human_power == "bonus":
+                human_gold = self.human_inventory.get("money", 0)
+                human_gold += self.power_bonus
+                self.human_inventory["money"] = human_gold
+
+                human_message = f"Gold: {self.human_inventory.get("money", 0)} $\nPower: {human_power}"
+                self.update_inventory("human", human_message)
+
+        if self.actor == "bot":
+            bot_power = self.bot_inventory.get("power", "")
+            if bot_power == "bonus":
+                bot_gold = self.bot_inventory.get("money", 0)
+                bot_gold += self.power_bonus
+                self.bot_inventory["money"] = bot_gold
+
+                bot_message = f"Gold: {self.bot_inventory.get("money", 0)} $\nPower: {bot_power}"
+                self.update_inventory("bot", bot_message)
+
+
+    def check_victory(self):
+        """Victory is: 
+            One of the players has no money and no properties
+            One of the players has completed a mission"""
+        human_gold = self.human_inventory.get("money", 0)
+        bot_gold = self.human_inventory.get("money", 0)
+
+        if human_gold <= 0:
+            self.update_guide_text(role="loss", target="human")
+            self.game_over(target="human")
+
+        if bot_gold <= 0:
+            self.update_guide_text(role="loss", target="bot")
+            self.game_over(target="bot")
+
+    def game_over(self, target):
+        """exit"""
+        logging.info("%s lost the game", target)
 
     def enterRollDice(self, task=None):
         logging.info(f"Rolling dice as {self.actor}")
@@ -482,11 +549,6 @@ class Monopoly2d(ShowBase, FSM):
             seq.append(Wait(0.05))
         # finally show the real roll
         seq.append(Func(self._set_faces, self.value_dice_1, self.value_dice_2))
-        # this is crazy
-        # seq.append(Func(self.taskMgr.doMethodLater,
-        #         0,
-        #         self._finish_roll_task,
-        #         "finishRoll"))
         seq.start()
         self.taskMgr.doMethodLater(
             seq.getDuration(),
@@ -494,7 +556,6 @@ class Monopoly2d(ShowBase, FSM):
             "finishRoll"
         )
 
-    # elsewhere in your class:
     def _finish_roll_task(self, task):
         logging.info(f"Transition to {task}")
         self.request("MovePlayer")
@@ -506,8 +567,8 @@ class Monopoly2d(ShowBase, FSM):
 
         self.move_player1()
 
-        # should check for victory before going to ai turn
-        self.taskMgr.doMethodLater(4, self._gotoPlayGame, "gotoPlayGame")
+        # TODO: should check for victory before going to ai turn
+#        self.taskMgr.doMethodLater(4, self._gotoPlayGame, "gotoPlayGame")
 
     def _gotoPlayGame(self, task):
         self.request("PlayGame")
@@ -534,7 +595,6 @@ class Monopoly2d(ShowBase, FSM):
         """Helper to set both dice’s textures to faces f1 and f2."""
         self.dice[0].setTexture(self.dice_textures[f1-1], 1)
         self.dice[1].setTexture(self.dice_textures[f2-1], 1)
-
 
     def generate_color_from_map(self, position):
         # Possible elements for contiguous blocks
@@ -570,15 +630,15 @@ class Monopoly2d(ShowBase, FSM):
             # Ensure we don't exceed the limit
             if len(result) >= self.count_monopoly_cards:
                 break
-            
+
             # Add a special element
             result.append(random.choice(special_elements))
 
         # close the list
         result.append("end")
-        
+
         return result
-        
+
     def create_background(self, nodename, parent, left, right, bottom, top, color):
         """Creates a background that spans the given horizontal range."""
         cm = CardMaker(nodename)
@@ -599,62 +659,27 @@ class Monopoly2d(ShowBase, FSM):
 
     def _update_right_view(self):
         half = self.visible_slots//2
-        i1   = int(round(self.index1))
-        start1 = min( max(i1-half, 0), self.count_monopoly_cards-self.visible_slots )
+        selected_visible_index = int(round(self.index1))
+        start1 = min( max(selected_visible_index-half, 0), self.count_monopoly_cards-self.visible_slots )
         self.right_content.setX( -start1 * (2.0/self.visible_slots) )
         # refresh highlight
         for r in self.rects_right: r.setScale(1,1,1)
-        self.rects_right[i1].setScale(1.2,1,1.2)
+        self.rects_right[selected_visible_index].setScale(1.2,1,1.2)
 
     def _update_left_view(self):
         # same as above but for left_content and rects_left
         half = self.visible_slots//2
-        i2   = int(round(self.index2))
-        start2 = min( max(i2-half, 0), self.count_monopoly_cards-self.visible_slots )
+        selected_visible_index   = int(round(self.index2))
+        start2 = min( max(selected_visible_index-half, 0), self.count_monopoly_cards-self.visible_slots )
         self.left_content.setX( -start2 * (2.0/self.visible_slots) )
         for r in self.rects_left: r.setScale(1,1,1)
-        self.rects_left[i2].setScale(1.2,1,1.2)
-
-    # def smooth_move1(self, delta):
-    #     # 1) update your logical index unbounded
-    #     self.index1 += delta
-
-    #     # 2) compute how far (in Panda2D-units) to slide
-    #     slot_width = 2.0 / self.visible_slots
-    #     dx = -delta * slot_width
-
-    #     # 3) grab the current X of the content
-    #     content = self.right_content
-    #     x_old   = content.getX()
-    #     x_new   = x_old + dx
-
-    #     # 4) animate from old→new
-    #     slide = LerpPosInterval(
-    #         nodePath  = content,
-    #         duration  = 0.5,          # tweak to taste
-    #         startPos  = (x_old,0,0),
-    #         pos       = (x_new,0,0),
-    #         blendType = 'easeInOut'
-    #     )
-
-    #     # 5) after sliding, re-highlight the “current” card
-    #     seq = Sequence(
-    #     slide,
-    #     Func(self._smooth_highlight_right)
-    #     )
-    #     seq.start()
-
-    # def _smooth_highlight_right(self):
-    #     """Scale up the current card (using index1 % N)."""
-    #     N       = self.count_monopoly_cards
-    #     i_mod   = self.index1 % N
-    #     for r in self.rects_right:
-    #         r.setScale(1,1,1)
-    #     self.rects_right[i_mod].setScale(1.2,1,1.2)
+        self.rects_left[selected_visible_index].setScale(1.2,1,1.2)
 
     def smooth_variant_move1(self, delta):
         # compute old & new indices
         selected_node_path = None
+        selected_card = None
+        card_position = None
 
         if self.actor == "human":
             old_index = self.index1
@@ -663,6 +688,10 @@ class Monopoly2d(ShowBase, FSM):
 
             selected_node_path = self.right_content
 
+            card_np = selected_node_path.find(f"**/R{new_index}")
+            if not card_np.isEmpty():
+                selected_card = card_np
+
         elif self.actor == "bot":
             old_index = self.index2
             new_index = (old_index + delta) % self.count_monopoly_cards
@@ -670,6 +699,13 @@ class Monopoly2d(ShowBase, FSM):
 
             selected_node_path = self.left_content
 
+            card_np = selected_node_path.find(f"**/L{new_index}")
+            if not card_np.isEmpty():
+                selected_card = card_np
+
+        card_position = selected_card.getPos()
+        print("Selected card is: ", selected_card)
+        print("Card Position is: ", card_position)
 
         # figure out the scroll‐offset before & after, exactly as in _update_right_view()
         half   = self.visible_slots // 2
@@ -687,30 +723,85 @@ class Monopoly2d(ShowBase, FSM):
             startPos = (x_old, 0, 0),
             blendType= 'easeInOut'        # optional smoothing
         )
-        finish = Func(self._highlight_card)
+        highlight = Func(self._highlight_card)
+        popup = Func(self._play_popup, selected_node_path, card_position)
 
         # play them in order
-        Sequence(slide, finish).start()
+        Sequence(slide, popup, highlight).start()
+
+    def attempt_buy(self):
+        print("Attempting to buy")
+        self._close_popup_and_continue()
+
+    def pay_rent(self):
+        print("Paying rent")
+        self._close_popup_and_continue()
+
+    def start_auction(self):
+        print("Starting auction")
+        self._close_popup_and_continue()
+
+    def skip_turn(self):
+        print("Skipping turn")
+        self._close_popup_and_continue()
+
+    def _play_popup(self, selected_node_path, card_position):
+        """Plays the popup animation"""
+        def buy_cb():  self.attempt_buy()
+        def rent_cb(): self.pay_rent()
+        def auc_cb():  self.start_auction()
+        def skip_cb():  self.skip_turn()
+
+        pos = None
+        if self.actor == "human":
+            pos = LPoint3f(0.5, 0, 0.1)
+        else:
+            pos = LPoint3f(-0.5, 0, 0.1)
+
+        self.popup = ActionCardPopup(
+            parent=selected_node_path,
+            position=card_position,
+#            position=pos,
+#            position=(x, 0, 0.1),
+            options={
+                "buy":   ("Buy Property", buy_cb),
+                "rent":  ("Pay Rent",   rent_cb),
+                "auction":("Auction",   auc_cb),
+                "pass":  ("Skip",       skip_cb),
+            },
+            texture="assets/monopoly_panel.png",
+    #        font_path="assets/fonts/sierras_font.ttf",
+            scale=0.7
+        )
+
+    def _close_popup_and_continue(self):
+        # destroy the popup if it hasn't already
+        if hasattr(self, 'popup') and self.popup:
+            self.popup.destroy()
+            self.popup = None
+
+        # now go on to the next phase of your game:
+        self._gotoPlayGame(task=None)
 
     def _highlight_card(self):
-        """Exactly your old highlight logic factored out"""
+        """highlight logic"""
         half = self.visible_slots//2
-        i1   = int(round(self.index1))
+        selected_visible_index = int(round(self.index1))
         # re‐position content in case of clamp at edges
-        start1 = min(max(i1-half, 0), self.count_monopoly_cards-self.visible_slots)
+        start1 = min(max(selected_visible_index-half, 0), self.count_monopoly_cards-self.visible_slots)
 
         if self.actor == "human":
             self.right_content.setX(-start1*(2.0/self.visible_slots))
             # rescale cards
             for r in self.rects_right:
                 r.setScale(1,1,1)
-            self.rects_right[i1].setScale(1.2,1,1.2)
+            self.rects_right[selected_visible_index].setScale(1.2,1,1.2)
         else:
             self.left_content.setX(-start1*(2.0/self.visible_slots))
             # rescale cards
             for r in self.rects_left:
                 r.setScale(1,1,1)
-            self.rects_left[i1].setScale(1.2,1,1.2)
+            self.rects_left[selected_visible_index].setScale(1.2,1,1.2)
 
 async def main():
     app = Monopoly2d()
