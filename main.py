@@ -479,8 +479,7 @@ class Monopoly2d(ShowBase, FSM):
                 "humanRollNow"
             )
 
-        self.taskMgr.doMethodLater(1, self.check_victory, "checkVictory")
-        
+        self.check_victory()
         self.check_powers()
 
         if self.actor == "human":
@@ -494,7 +493,7 @@ class Monopoly2d(ShowBase, FSM):
 
     def check_powers(self):
         """We check powers to know if we need to update inventory"""
-
+        logging.info("Check Powers to update inventory")
         if self.actor == "human":
             human_power = self.human_inventory.get("power", "")
             if human_power == "bonus":
@@ -515,13 +514,15 @@ class Monopoly2d(ShowBase, FSM):
                 bot_message = f"Gold: {self.bot_inventory.get("money", 0)} $\nPower: {bot_power}"
                 self.update_inventory("bot", bot_message)
 
+        logging.info("End check Powers to update inventory")
 
-    def check_victory(self, task):
+
+    def check_victory(self):
         """Victory is: 
             One of the players has no money and no properties
             One of the players has completed a mission"""
         human_gold = self.human_inventory.get("money", 0)
-        bot_gold = self.human_inventory.get("money", 0)
+        bot_gold = self.bot_inventory.get("money", 0)
 
         logging.info("Human gold is: %s, Bot gold is: %s", human_gold, bot_gold)
 
@@ -543,7 +544,7 @@ class Monopoly2d(ShowBase, FSM):
         logging.info("Rolling dice as %s", self.actor)
 
         # no more enter accepted or it breaks the flow
-        self.ignore("enter")
+#        self.ignore("enter")
 
         # pick final results
         self.value_dice_1 = random.randint(1,6)
@@ -575,10 +576,9 @@ class Monopoly2d(ShowBase, FSM):
         logging.info(f"Entered PlayerMove as {self.actor}")
         self.update_guide_text(role="dice_result")
 
-        self.move_player1()
+        delta = self.value_dice_1 + self.value_dice_2
+        self.smooth_variant_move1(delta=delta)
 
-        # TODO: should check for victory before going to ai turn
-#        self.taskMgr.doMethodLater(4, self._gotoPlayGame, "gotoPlayGame")
 
     def _gotoPlayGame(self, task):
         self.request("PlayGame")
@@ -592,12 +592,6 @@ class Monopoly2d(ShowBase, FSM):
         else:
             self.actor = "human"
 
-    def move_player1(self):
-        logging.info("move p1")
-
-        delta = self.value_dice_1 + self.value_dice_2
-
-        self.smooth_variant_move1(delta=delta)
 
     ### end FSM ###
 
@@ -687,7 +681,7 @@ class Monopoly2d(ShowBase, FSM):
 
     def smooth_variant_move1(self, delta):
         # deregister enter as we need it inside the popup
-        self.ignore("enter")
+#        self.ignore("enter")
 
         # compute old & new indices
         selected_node_path = None

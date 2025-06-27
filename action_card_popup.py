@@ -1,6 +1,6 @@
 from direct.showbase.ShowBase import ShowBase
 from direct.gui.OnscreenImage import OnscreenImage
-from panda3d.core import TransparencyAttrib, TextNode, Loader, LPoint3f
+from panda3d.core import TransparencyAttrib, TextNode, Loader, LPoint3f, LColor
 
 class ActionCardPopup:
     def __init__(self, parent, position, options, texture, font_path=None, scale=0.8):
@@ -12,6 +12,9 @@ class ActionCardPopup:
         """
         self.options = options
 
+        self.selected_index = 0
+        self.text_nodes = []  # store the NodePaths for the option labels
+
         # 1) Draw the card background
         aspect = base.getAspectRatio()
         self.card = OnscreenImage(
@@ -22,9 +25,6 @@ class ActionCardPopup:
             parent=parent
         )
         self.card.setTransparency(TransparencyAttrib.MAlpha)
-
-        print("Popup attached to:", self.card.getParent())
-        print("Position:", self.card.getPos(render2d))  # or render2d if using aspect2d
 
         # 2) Load your pixel/serif font
         if font_path:
@@ -54,26 +54,39 @@ class ActionCardPopup:
             midx = (x1 + x2) / 2
             midy = (y1 + y2) / 2
             text_np.setPos(midx, 0, midy)
+            self.text_nodes.append(text_np)
 
-        # 5) Listen for clicks
-        base.accept("mouse1", self._on_click)
+        self._update_highlight()
 
-    def _on_click(self):
-        if not base.mouseWatcherNode.hasMouse():
-            return
-        mx, my = base.mouseWatcherNode.getMouse()  # -1..+1 on both axes
-        # check which region it falls into
-        for key, (x1,x2,y1,y2) in self.regions.items():
-            if x1 <= mx <= x2 and y1 <= my <= y2:
-                # call the callback
-                _, cb = self.options[key]
-                cb()
-                self.destroy()
-                break
+        # listen for keys
+        base.accept("arrow_up",   self._move_selection, [-1])
+        base.accept("arrow_down", self._move_selection, [1])
+        base.accept("enter",      self._select_current)
+
+
+    def _move_selection(self, delta):
+        count = len(self.text_nodes)
+        self.selected_index = (self.selected_index + delta) % count
+        self._update_highlight()
+
+    def _update_highlight(self):
+        for idx, np in enumerate(self.text_nodes):
+            if idx == self.selected_index:
+                np.setColorScale(LColor(1, 1, 0, 1))  # yellow glow
+            else:
+                np.clearColorScale()
+
+    def _select_current(self):
+        key = list(self.options.keys())[self.selected_index]
+        _, cb = self.options[key]
+        cb()
+        self.destroy()
 
     def destroy(self):
         # remove the card and all children the popup created
         if self.card:
             self.card.removeNode()
-        # unhook mouse listener
-        base.ignore("mouse1")
+        # unhook arrows listener
+        base.ignore("arrow_up")
+        base.ignore("arrow_down")
+#        base.ignore("enter")
