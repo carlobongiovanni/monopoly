@@ -90,6 +90,9 @@ class Monopoly2d(ShowBase, FSM):
         # popup
         self.popup = None
 
+        # tracks how many turns have passed
+        self.turn = 0
+
         # debug will to skip setup - set debug as env variable
         self.debug = bool(DEBUG)
 
@@ -466,6 +469,8 @@ class Monopoly2d(ShowBase, FSM):
         logging.info(f"enter PlayGame for {self.actor}")
         self.update_guide_text(role="start")
 
+        self.turn += 1
+
         if self.debug:
             logging.info("Debug Jump to RollDice")
             self.taskMgr.doMethodLater(
@@ -474,7 +479,8 @@ class Monopoly2d(ShowBase, FSM):
                 "humanRollNow"
             )
 
-        self.check_victory()
+        self.taskMgr.doMethodLater(1, self.check_victory, "checkVictory")
+        
         self.check_powers()
 
         if self.actor == "human":
@@ -510,12 +516,14 @@ class Monopoly2d(ShowBase, FSM):
                 self.update_inventory("bot", bot_message)
 
 
-    def check_victory(self):
+    def check_victory(self, task):
         """Victory is: 
             One of the players has no money and no properties
             One of the players has completed a mission"""
         human_gold = self.human_inventory.get("money", 0)
         bot_gold = self.human_inventory.get("money", 0)
+
+        logging.info("Human gold is: %s, Bot gold is: %s", human_gold, bot_gold)
 
         if human_gold <= 0:
             self.update_guide_text(role="loss", target="human")
@@ -525,12 +533,14 @@ class Monopoly2d(ShowBase, FSM):
             self.update_guide_text(role="loss", target="bot")
             self.game_over(target="bot")
 
+        logging.info("Game continues... we're at turn %d", self.turn)
+
     def game_over(self, target):
         """exit"""
         logging.info("%s lost the game", target)
 
     def enterRollDice(self, task=None):
-        logging.info(f"Rolling dice as {self.actor}")
+        logging.info("Rolling dice as %s", self.actor)
 
         # no more enter accepted or it breaks the flow
         self.ignore("enter")
@@ -575,7 +585,7 @@ class Monopoly2d(ShowBase, FSM):
         return Task.done
 
     def exitMovePlayer(self):
-        """switch condition"""
+        """switch actor"""
 
         if self.actor == "human":
             self.actor = "bot"
@@ -676,6 +686,9 @@ class Monopoly2d(ShowBase, FSM):
         self.rects_left[selected_visible_index].setScale(1.2,1,1.2)
 
     def smooth_variant_move1(self, delta):
+        # deregister enter as we need it inside the popup
+        self.ignore("enter")
+
         # compute old & new indices
         selected_node_path = None
         selected_card = None
@@ -704,8 +717,6 @@ class Monopoly2d(ShowBase, FSM):
                 selected_card = card_np
 
         card_position = selected_card.getPos()
-        print("Selected card is: ", selected_card)
-        print("Card Position is: ", card_position)
 
         # figure out the scroll‐offset before & after, exactly as in _update_right_view()
         half   = self.visible_slots // 2
@@ -752,17 +763,9 @@ class Monopoly2d(ShowBase, FSM):
         def auc_cb():  self.start_auction()
         def skip_cb():  self.skip_turn()
 
-        pos = None
-        if self.actor == "human":
-            pos = LPoint3f(0.5, 0, 0.1)
-        else:
-            pos = LPoint3f(-0.5, 0, 0.1)
-
         self.popup = ActionCardPopup(
             parent=selected_node_path,
             position=card_position,
-#            position=pos,
-#            position=(x, 0, 0.1),
             options={
                 "buy":   ("Buy Property", buy_cb),
                 "rent":  ("Pay Rent",   rent_cb),
@@ -786,18 +789,23 @@ class Monopoly2d(ShowBase, FSM):
     def _highlight_card(self):
         """highlight logic"""
         half = self.visible_slots//2
-        selected_visible_index = int(round(self.index1))
-        # re‐position content in case of clamp at edges
-        start1 = min(max(selected_visible_index-half, 0), self.count_monopoly_cards-self.visible_slots)
 
         if self.actor == "human":
+            selected_visible_index = int(round(self.index1))
+            # re‐position content in case of clamp at edges
+            start1 = min(max(selected_visible_index-half, 0), self.count_monopoly_cards-self.visible_slots)
+
             self.right_content.setX(-start1*(2.0/self.visible_slots))
             # rescale cards
             for r in self.rects_right:
                 r.setScale(1,1,1)
             self.rects_right[selected_visible_index].setScale(1.2,1,1.2)
         else:
-            self.left_content.setX(-start1*(2.0/self.visible_slots))
+            selected_visible_index = int(round(self.index2))
+            # re‐position content in case of clamp at edges
+            start2 = min(max(selected_visible_index-half, 0), self.count_monopoly_cards-self.visible_slots)
+
+            self.left_content.setX(-start2*(2.0/self.visible_slots))
             # rescale cards
             for r in self.rects_left:
                 r.setScale(1,1,1)
