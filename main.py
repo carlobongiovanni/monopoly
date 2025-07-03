@@ -18,6 +18,8 @@ from direct.showbase.ShowBase import ShowBase
 from direct.task import Task
 from direct.interval.IntervalGlobal import Sequence, Wait, Func, LerpPosInterval
 from direct.fsm.FSM import FSM
+from settings_page import SettingsPage
+from screen_title import TitleScreen
 from action_card_popup import ActionCardPopup
 
 DEBUG = os.environ.get("DEBUG")
@@ -93,6 +95,9 @@ class Monopoly2d(ShowBase, FSM):
         # tracks how many turns have passed
         self.turn = 0
 
+        # settings page
+        self.settings = None
+
         # debug will to skip setup - set debug as env variable
         self.debug = bool(DEBUG)
 
@@ -102,7 +107,15 @@ class Monopoly2d(ShowBase, FSM):
             self._on_start_pressed()
         else:
             logging.info("Debug UNACTIVE")
-            self.request("Idle")
+            self.titlescreen = TitleScreen(base=self, on_start=self.enter_settings)
+#            self.titlescreen = TitleScreen(base=self, on_start=lambda: self.request("Idle"))
+
+    def enter_settings(self):
+#        self.titlescreen.cleanup()
+        self.settings = SettingsPage(
+            base=self,
+            on_start_game=lambda: self.request("Idle")
+        )
 
     def _debug_node(self, node):
         """helper to understand WTF I did"""
@@ -205,6 +218,8 @@ class Monopoly2d(ShowBase, FSM):
         )
 
         # generate the map of the game
+        for card in self._generate_map():
+            print(card)
         self.monopoly_map = self.generate_map()
 
         # populate the lanes
@@ -419,7 +434,6 @@ class Monopoly2d(ShowBase, FSM):
         self.count_entry  = None
         self.p1_entry     = None
         self.start_button = None
-#        self.ignore("escape")
 
 
     # ──── MENU CALLBACKS ────
@@ -543,9 +557,6 @@ class Monopoly2d(ShowBase, FSM):
     def enterRollDice(self, task=None):
         logging.info("Rolling dice as %s", self.actor)
 
-        # no more enter accepted or it breaks the flow
-#        self.ignore("enter")
-
         # pick final results
         self.value_dice_1 = random.randint(1,6)
         self.value_dice_2 = random.randint(1,6)
@@ -612,6 +623,104 @@ class Monopoly2d(ShowBase, FSM):
             return LColor(.82, .91, .86, 1)
         
         return LColor(.69, .69, .69, 1)
+
+    def _generate_map(self):
+        # 1) base data
+        block_elements   = ["Road", "Street", "Castle", "Palace", "Corner"]
+        block_titles     = [
+            "Windsor", "Versailles", "Edinburgh", "Regent", "Victoria",
+            "Kensington", "Balmoral", "Trafalgar", "Piccadilly",
+            "Lancaster", "Dover", "Hampton", "York", "Nottingham"
+        ]
+        special_elements = ["Station", "Facility", "Prison", "Hospital", "Museum", "Hotel", "Shop"]
+
+        # clubs
+        clubs = [
+            "Ritter Butzke",
+            "Renate",
+            "Berghain",
+            "KitKat",
+            "Tresor",
+            "Matrix",
+            "Watergate"
+            ]
+
+        # bezirks
+
+        p = [
+            ""
+        ]
+
+        berlin_landmarks = [
+            "Brandenburg Gate", "Reichstag", "Berlin Cathedral",
+            "TV Tower", "Museum Island", "Checkpoint Charlie",
+            "East Side Gallery", "Charlottenburg Palace", "Potsdamer Platz"
+        ]
+
+        # 2) prepare a shuffled pool of all unique block names
+        block_name_pool = [
+            f"{elem} {title}"
+            for elem in block_elements
+            for title in block_titles
+        ]
+        random.shuffle(block_name_pool)
+
+        # 3) assign a fixed color+price to each special type
+        special_cfg = {}
+        for se in special_elements:
+            price = random.choice(range(40, 101, 10))  # 40,50,…,100
+            color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+            special_cfg[se] = {"price": price, "color": color}
+
+        # 4) start the map
+        result = [
+            {"name": "start", "type": "start", "price": None, "color": None}
+        ]
+
+        # 5) fill middle cards
+        #    leave room for the final "end" card
+        while len(result) < self.count_monopoly_cards - 1:
+            # a) make a contiguous block of size 2 or 3
+            block_size  = random.choice([2, 3])
+            block_color = "#{:06x}".format(random.randint(0, 0xFFFFFF))
+            # draw unique names from the pool
+            block_names = []
+            for _ in range(block_size):
+                if not block_name_pool:
+                    break
+                block_names.append(block_name_pool.pop())
+            if not block_names:
+                break  # no more unique blocks available
+
+            # pick unique prices for this block (step of 5)
+            block_prices = random.sample(range(20, 201, 5), len(block_names))
+
+            for name, price in zip(block_names, block_prices):
+                result.append({
+                    "name":  name,
+                    "type":  "block",
+                    "price": price,
+                    "color": block_color,
+                })
+
+            # stop if we’ve reached the limit
+            if len(result) >= self.count_monopoly_cards - 1:
+                break
+
+            # b) add one special card
+            se  = random.choice(special_elements)
+            cfg = special_cfg[se]
+            result.append({
+                "name":  se,
+                "type":  "special",
+                "price": cfg["price"],
+                "color": cfg["color"],
+            })
+
+        # 6) append the "end" card
+        result.append({"name": "end", "type": "end", "price": None, "color": None})
+
+        return result
 
     def generate_map(self):
         # Possible elements for contiguous blocks
@@ -680,13 +789,11 @@ class Monopoly2d(ShowBase, FSM):
         self.rects_left[selected_visible_index].setScale(1.2,1,1.2)
 
     def smooth_variant_move1(self, delta):
-        # deregister enter as we need it inside the popup
-#        self.ignore("enter")
-
         # compute old & new indices
         selected_node_path = None
         selected_card = None
         card_position = None
+        card_name = ""
 
         if self.actor == "human":
             old_index = self.index1
@@ -699,6 +806,8 @@ class Monopoly2d(ShowBase, FSM):
             if not card_np.isEmpty():
                 selected_card = card_np
 
+            card_name = self.monopoly_map[self.index1]
+
         elif self.actor == "bot":
             old_index = self.index2
             new_index = (old_index + delta) % self.count_monopoly_cards
@@ -709,6 +818,8 @@ class Monopoly2d(ShowBase, FSM):
             card_np = selected_node_path.find(f"**/L{new_index}")
             if not card_np.isEmpty():
                 selected_card = card_np
+
+            card_name = self.monopoly_map[self.index2]
 
         card_position = selected_card.getPos()
 
@@ -729,7 +840,7 @@ class Monopoly2d(ShowBase, FSM):
             blendType= 'easeInOut'        # optional smoothing
         )
         highlight = Func(self._highlight_card)
-        popup = Func(self._play_popup, selected_node_path, card_position)
+        popup = Func(self._play_popup, selected_node_path, card_position, card_name)
 
         # play them in order
         Sequence(slide, popup, highlight).start()
@@ -750,7 +861,8 @@ class Monopoly2d(ShowBase, FSM):
         print("Skipping turn")
         self._close_popup_and_continue()
 
-    def _play_popup(self, selected_node_path, card_position):
+    def _play_popup(self, selected_node_path, card_position, card_name):
+        logging.info("_play_popup for %s", card_name)
         """Plays the popup animation"""
         def buy_cb():  self.attempt_buy()
         def rent_cb(): self.pay_rent()
