@@ -18,8 +18,8 @@ class TitleScreen(DirectObject):
         self.accept("enter", self.start_game)
         self.accept("escape", sys.exit)
 
-        self.enter_text = None
-        self.noisy_text = None
+        self.enter_text_np = None
+        self.noisy_text_np = None
 
         # Disable default camera mouse
         self.base.disableMouse()
@@ -29,8 +29,8 @@ class TitleScreen(DirectObject):
         bg = OnscreenImage(parent=self.base.render2d, image="assets/bg_fill.png")
         bg.setTransparency(TransparencyAttrib.MAlpha)
 
-        self.bold_font = self.base.loader.loadFont("Orbitron/static/Orbitron-Bold.ttf")
-        self.title = "CELEBRITY\nWARS"
+        self.bold_font = self.base.loader.loadFont("assets/fonts/Orbitron/static/Orbitron-Bold.ttf")
+        self.title = "UNDEFINED\nWARS"
 
         # Add noisy red text
         self.create_noisy_text()
@@ -43,37 +43,35 @@ class TitleScreen(DirectObject):
         self.base.taskMgr.add(self.pulse_text, "PulseTextTask")
 
     def create_press_enter(self):
+        text_node = TextNode("press-enter")
+        text_node.setText("PRESS [ENTER] TO PLAY")
+        text_node.setFont(self.bold_font)
+        text_node.setTextColor(1, 0, 0, 1)
+        text_node.setAlign(TextNode.ACenter)
 
-        self.enter_text = OnscreenText(
-            text="PRESS [ENTER] TO PLAY",
-            font=self.bold_font,
-            pos=(0, -0.4),  # center down
-            scale=0.1,
-            fg=LColor(1, 0, 0, 1),  # red
-            mayChange=True,
-            align=TextNode.ACenter,
-            parent=self.base.aspect2d
-        )
+        self.enter_text_np = self.base.aspect2d.attachNewNode(text_node.generate())
+        self.enter_text_np.setScale(0.1)
+        self.enter_text_np.setPos(0, 0, -0.4)
+        self.enter_text_np.setTransparency(True)
 
     def pulse_text(self, task):
         t = globalClock.getFrameTime()
         brightness = 0.5 + 0.5 * abs(sin(t * 3))  # between 0.5 and 1.0
-        self.enter_text.setColorScale(brightness, 0.0, 0.0, 1.0)
+        self.enter_text_np.setColorScale(brightness, 0.0, 0.0, 1.0)
         return task.cont
         
     def create_noisy_text(self):
 
-        self.noisy_text = OnscreenText(
-            text=self.title,
-            font=self.bold_font,
-            pos=(0, .2),  # center
-            scale=0.25,
-            fg=LColor(.5, 0, 0, 1),  # red
-            mayChange=True,
-            align=TextNode.ACenter,
-            parent=self.base.aspect2d
-        )
-        self.noisy_text.setTransparency(True)
+        text_node = TextNode("title-game")
+        text_node.setText(self.title)
+        text_node.setFont(self.bold_font)
+        text_node.setTextColor(.5, 0, 0, 1)
+        text_node.setAlign(TextNode.ACenter)
+
+        self.noisy_text_np = self.base.aspect2d.attachNewNode(text_node.generate())
+        self.noisy_text_np.setScale(0.25)
+        self.noisy_text_np.setPos(0, 0, 0.2)
+        self.noisy_text_np.setTransparency(True)
 
     def start_game(self):
         """callback to get into the FSM"""
@@ -83,25 +81,28 @@ class TitleScreen(DirectObject):
         self.fade_out()
 
     def fade_out(self):
-        fade_duration = 1.2
+        print(self.enter_text_np, self.noisy_text_np)
+        fade_duration = 1.1
 
-        # Intervals for text + enter prompt
-        text_fade  = LerpColorScaleInterval(self.noisy_text, fade_duration, (0, 0, 0, 0))
-        enter_fade = LerpColorScaleInterval(self.enter_text, fade_duration, (0, 0, 0, 0))
+        fade_sequence = Sequence()
 
-        intervals = [text_fade, enter_fade]
+        # 1. Fade "Press Enter" prompt
+        enter_fade = LerpColorScaleInterval(self.enter_text_np, fade_duration, (0, 0, 0, 0))
+        fade_sequence.append(enter_fade)
 
-        # If lasers exist and weren't removed yet
+        # 2. Fade laser field if active
         if self.lasers and not self.lasers.node.isEmpty():
             laser_fade = LerpColorScaleInterval(self.lasers.node, fade_duration, (0, 0, 0, 0))
-            intervals.append(laser_fade)
+            fade_sequence.append(laser_fade)
 
-        # Build and play sequence
-        fade_sequence = Sequence(
-            *intervals,
-            Func(self.cleanup),
-            Func(self.on_start)
-        )
+        # 3. Fade noisy title text
+        title_fade = LerpColorScaleInterval(self.noisy_text_np, fade_duration, (0, 0, 0, 0))
+        fade_sequence.append(title_fade)
+
+        # 4. Cleanup + move on
+        fade_sequence.append(Func(self.cleanup))
+        fade_sequence.append(Func(self.on_start))
+
         fade_sequence.start()
 
     def cleanup(self):
@@ -109,10 +110,8 @@ class TitleScreen(DirectObject):
         self.base.taskMgr.remove("PulseTextTask")
         if self.lasers and not self.lasers.node.isEmpty():
             self.lasers.node.removeNode()
-        self.noisy_text.removeNode()
-        self.enter_text.removeNode()
-
-
+        self.enter_text_np.removeNode()
+        self.noisy_text_np.removeNode()
 
 class LaserField:
     def __init__(self, render2d, num_lines=20):
