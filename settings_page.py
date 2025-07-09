@@ -1,6 +1,7 @@
 from direct.showbase.DirectObject import DirectObject
 from panda3d.core import TransparencyAttrib, TextNode, LineSegs, NodePath, ColorBlendAttrib, LColor
 import sys
+from settings_characters_page import CharactersSettings
 
 class SettingsPage(DirectObject):
     def __init__(self, base, on_start_game):
@@ -10,25 +11,58 @@ class SettingsPage(DirectObject):
         self.text_nodes = []
         self.selected_index = 0
         self.callbacks = {}
+        # container for all menu nodes
+        self.menu_root = None
 
         print("SettingsPage init - press enter again")
         # Example: user sets config, then presses Enter
 #        self.accept("enter", self.start_game)
-        self.accept("escape", sys.exit)
+        self.base.accept("escape", sys.exit)
 
         self.bold_font = self.base.loader.loadFont("assets/fonts/Orbitron/static/Orbitron-Bold.ttf")
 
+        self.show_menu()
         # draw the options for the settings menu
-        self.tutorial()
-        self.characters_settings()
-        self.custom_settings()
-        self.start_game()
 
         self.base.accept("arrow_up",   self._move_selection, [-1])
         self.base.accept("arrow_down", self._move_selection, [1])
         self.base.accept("enter",      self._select_current)
 
+    def show_menu(self):
+        if self.menu_root:
+            self.menu_root.removeNode()
 
+        self.menu_root = self.base.aspect2d.attachNewNode("menu-root")
+        self.text_nodes.clear()
+        self.callbacks.clear()
+
+        self.draw_menu_element("view-tutorial", "Tutorial", 0.4, self.tutorial_cb)
+        self.draw_menu_element("edit-characters", "Edit Characters", 0.2, self.characters_settings_cb)
+        self.draw_menu_element("edit-custom-settings", "Custom Settings", 0, self.custom_settings_cb)
+        self.draw_menu_element("start-game", "Start Game", -0.2, self.start_game_cb)
+
+    def hide_menu(self):
+        # nukes the entire menu and all its text nodes
+        if self.menu_root:
+            self.menu_root.removeNode()
+            self.menu_root = None
+            self.text_nodes.clear()
+            self.callbacks.clear()
+
+    def draw_menu_element(self, node_name, label, y_position, callback):
+        text_node = TextNode(node_name)
+        text_node.setText(label)
+        text_node.setFont(self.bold_font)
+        text_node.setAlign(TextNode.ACenter)
+
+        text_node_np = self.menu_root.attachNewNode(text_node.generate())
+        text_node_np.setColor(1,0,0,1)
+        text_node_np.setScale(0.1)
+        text_node_np.setPos(0, 0, y_position)
+        text_node_np.setTransparency(True)
+
+        self.text_nodes.append(text_node_np)
+        self.callbacks[text_node_np] = callback
 
     def _move_selection(self, delta):
         count = len(self.text_nodes)
@@ -61,71 +95,9 @@ class SettingsPage(DirectObject):
 
     def characters_settings_cb(self):
         print("characters_settings_cb")
+        self.cleanup()
+        cs = CharactersSettings(base=self.base, on_start=self.show_menu)
     ## end callbacks
-
-    def start_game(self):
-        text_node = TextNode("start-game")
-        text_node.setText("Start Game")
-        text_node.setFont(self.bold_font)
-        text_node.setAlign(TextNode.ACenter)
-
-        start_game_np = self.base.aspect2d.attachNewNode(text_node.generate())
-        start_game_np.setColor(1,0,0,1)
-        start_game_np.setScale(0.1)
-        start_game_np.setPos(0, 0, -0.2)
-        start_game_np.setTransparency(True)
-        
-        self.text_nodes.append(start_game_np)
-        self.callbacks[start_game_np] = self.start_game_cb
-
-    def tutorial(self):
-        text_node = TextNode("view-tutorial")
-        text_node.setText("Tutorial")
-        text_node.setFont(self.bold_font)
-        text_node.setAlign(TextNode.ACenter)
-
-        tutorial_np = self.base.aspect2d.attachNewNode(text_node.generate())
-        tutorial_np.setColor(1,0,0,1)
-        tutorial_np.setScale(0.1)
-        tutorial_np.setPos(0, 0, 0.4)
-        tutorial_np.setTransparency(True)
-
-        self.text_nodes.append(tutorial_np)
-        self.callbacks[tutorial_np] = self.tutorial_cb
-
-
-    def custom_settings(self):
-        text_node = TextNode("edit-custom-settings")
-        text_node.setText("Custom Settings")
-        text_node.setFont(self.bold_font)
-        text_node.setAlign(TextNode.ACenter)
-
-        custom_settings_np = self.base.aspect2d.attachNewNode(text_node.generate())
-        custom_settings_np.setColor(1,0,0,1)
-        custom_settings_np.setScale(0.1)
-        custom_settings_np.setPos(0, 0, 0)
-        custom_settings_np.setTransparency(True)
-
-        self.text_nodes.append(custom_settings_np)
-        self.callbacks[custom_settings_np] = self.custom_settings_cb
-
-
-    def characters_settings(self):
-        text_node = TextNode("edit-characters")
-        text_node.setText("Edit Characters")
-        text_node.setFont(self.bold_font)
-        text_node.setAlign(TextNode.ACenter)
-
-        characters_settings_np = self.base.aspect2d.attachNewNode(text_node.generate())
-        characters_settings_np.setColor(1,0,0,1)
-        characters_settings_np.setScale(0.1)
-        characters_settings_np.setPos(0, 0, 0.2)
-        characters_settings_np.setTransparency(True)
-
-        self.text_nodes.append(characters_settings_np)
-        self.callbacks[characters_settings_np] = self.characters_settings_cb
-        
-
 
     def _start_game(self):
         print("Starting game from settings...")
@@ -133,5 +105,7 @@ class SettingsPage(DirectObject):
         self.on_start_game()
 
     def cleanup(self):
-        self.ignoreAll()
-        # remove ui nodes
+        self.base.ignore("arrow_up")
+        self.base.ignore("arrow_down")
+        self.base.ignore("enter")
+        self.hide_menu()

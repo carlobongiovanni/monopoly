@@ -1,24 +1,23 @@
-from direct.showbase.ShowBase import ShowBase
-from panda3d.core import CardMaker, Shader, Vec4, loadPrcFileData
+from direct.showbase.DirectObject import DirectObject
+from panda3d.core import CardMaker, Shader, Vec4
 import sys
 
-# tell Panda to make a 1024×600 window, windowed (not fullscreen)
-loadPrcFileData("", """
-    win-size 1024 600
-    fullscreen 0
-    show-frame-rate-meter 0
-""")
-
-class GrayscaleBoxesApp(ShowBase):
-    def __init__(self):
+class CharactersSettings(DirectObject):
+    def __init__(self, base, on_start):
         super().__init__()
+        self.base = base
+        self.on_start = on_start
         self.accept("escape", sys.exit)
+        print("inside CharactersSettings")
 
         # Load and display the background image on a full-screen quad
-        tex = self.loader.loadTexture("assets/bg_characters.png")
+        tex = self.base.loader.loadTexture("assets/bg_characters.png")
         cm  = CardMaker("bg")
         cm.setFrame(-1, 1, -1, 1)
-        card = self.render2d.attachNewNode(cm.generate())
+        card = self.base.render2d.attachNewNode(cm.generate())
+        card.setDepthTest(False)
+        card.setDepthWrite(False)
+        card.setBin("fixed", 50)
         card.setTexture(tex)
         card.setShader(Shader.load(Shader.SL_GLSL,
                                   "assets/shaders/blur.vert",
@@ -44,7 +43,3 @@ class GrayscaleBoxesApp(ShowBase):
         # wrap index around the list
         self.currentIndex = (self.currentIndex + delta) % len(self.boxPositions)
         self.update_shader_box()
-
-if __name__ == "__main__":
-    app = GrayscaleBoxesApp()
-    app.run()
