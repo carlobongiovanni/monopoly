@@ -69,12 +69,6 @@ class Monopoly2d(ShowBase, FSM):
         self.value_dice_1 = 1
         self.value_dice_2 = 1
 
-        # placeholders for GUI widgets
-        self.menu_frame    = None
-        self.count_entry   = None
-        self.p1_entry      = None
-        self.start_button  = None
-
         # which actor is in charge of action now
         self.actor = "human"
 
@@ -123,7 +117,7 @@ class Monopoly2d(ShowBase, FSM):
         print("State on parent:", node.getState())
         print(node.getParent().getName())
 
-    def _build_game(self):
+    def _draw_game(self):
         """draws the game interface and the cards"""
         bg_left  = self.create_background(
             "bg_left", 
@@ -339,7 +333,6 @@ class Monopoly2d(ShowBase, FSM):
             "cards": [{}]
         }
 
-
     def setup_dices(self, nodename):
         """adds the dices to the bg_scoring"""
         # clears the parent color or the texture won't show!
@@ -364,93 +357,18 @@ class Monopoly2d(ShowBase, FSM):
             node.setTexture(self.dice_textures[0], 1)
             self.dice.append(node)
 
-
     def enterIdle(self):
         """Show the configuration menu."""
-        logging.info("Idle State aka selection menu entered")
-        self.menu_frame = DirectFrame(
-            frameColor=(0,0,0,0.7),
-            frameSize=(-0.8,0.8,-0.6,0.6),
-            pos=(0,0,0)
-        )
+        logging.info("Idle State aka start game pressed")
 
-        # 2) Label + DirectEntry for card count
-        DirectLabel(
-            text="Number of Cards:",
-            parent=self.menu_frame,
-            pos=(-0.6,0,0.3),
-            scale=0.07,
-            text_align=TextNode.ALeft
-        )
-        self.count_entry = DirectEntry(
-            parent=self.menu_frame,
-            text=str(self.count_monopoly_cards),
-            initialText="",
-            numLines=1,
-            pos=(0.1,0,0.3),
-            scale=0.07,
-            width=4,
-            command=self._on_count_changed
-        )
-
-        # 3) Player 1 name
-        DirectLabel(
-            text="Player 1 Name:",
-            parent=self.menu_frame,
-            pos=(-0.6,0,0.1),
-            scale=0.07,
-            text_align=TextNode.ALeft
-        )
-        self.p1_entry = DirectEntry(
-            parent=self.menu_frame,
-            text=self.player1_name,
-            numLines=1,
-            pos=(0.1,0,0.1),
-            scale=0.07,
-            width=8,
-            command=self._on_p1_name_changed
-        )
-
-        # 5) Start Game button
-        self.start_button = DirectButton(
-            text="Start Game",
-            parent=self.menu_frame,
-            pos=(0,0,-0.4),
-            scale=0.08,
-            command=self._on_start_pressed
-        )
-
-        # allow escape to quit
+        self._draw_game()
         self.accept("escape", sys.exit)
 
-    def exitIdle(self):
-        """Tear down the menu widgets."""
-        logging.info("exit Idle")
-
-        for w in (self.count_entry, self.p1_entry, self.start_button, self.menu_frame):
-            if w:
-                w.destroy()
-        self.menu_frame   = None
-        self.count_entry  = None
-        self.p1_entry     = None
-        self.start_button = None
-
-
-    # ──── MENU CALLBACKS ────
-    def _on_count_changed(self, text):
-        try:
-            val = int(text)
-            self.count_monopoly_cards = max(1, val)
-        except ValueError:
-            pass  # ignore bad input
-
-    def _on_p1_name_changed(self, text):
-        self.player1_name = text or "Player1"
-
-    def _on_start_pressed(self):
-        """User hit Start—build the game boards, then begin P1’s turn."""
-        self._build_game()
-        self.request("PlayGame")
+        self.taskMgr.doMethodLater(
+                0,
+                self.enterPlayGame,
+                "enterIdle"
+            )
 
     def update_guide_text(self, role, target=None):
         """displays the message in the bg_scoring according to the game state"""
@@ -477,7 +395,7 @@ class Monopoly2d(ShowBase, FSM):
 
         self.guide_text.setText(message)
 
-    def enterPlayGame(self):
+    def enterPlayGame(self, task=None):
         """enters the game
         """
         logging.info(f"enter PlayGame for {self.actor}")
@@ -590,7 +508,6 @@ class Monopoly2d(ShowBase, FSM):
         delta = self.value_dice_1 + self.value_dice_2
         self.smooth_variant_move1(delta=delta)
 
-
     def _gotoPlayGame(self, task):
         self.request("PlayGame")
         return Task.done
@@ -602,8 +519,6 @@ class Monopoly2d(ShowBase, FSM):
             self.actor = "bot"
         else:
             self.actor = "human"
-
-
     ### end FSM ###
 
     def _set_faces(self, f1, f2):
@@ -646,11 +561,6 @@ class Monopoly2d(ShowBase, FSM):
             ]
 
         # bezirks
-
-        p = [
-            ""
-        ]
-
         berlin_landmarks = [
             "Brandenburg Gate", "Reichstag", "Berlin Cathedral",
             "TV Tower", "Museum Island", "Checkpoint Charlie",
