@@ -30,7 +30,7 @@ class TitleScreen(DirectObject):
         bg.setTransparency(TransparencyAttrib.MAlpha)
 
         self.bold_font = self.base.loader.loadFont("assets/fonts/Orbitron/static/Orbitron-Bold.ttf")
-        self.title = "UNDEFINED\nWARS"
+        self.title = "FROGS vs\nHEDGEHOGS"
 
         # Add noisy red text
         self.create_noisy_text()

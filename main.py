@@ -119,15 +119,30 @@ class Monopoly2d(ShowBase, FSM):
 
     def _draw_game(self):
         """draws the game interface and the cards"""
-        bg_left  = self.create_background(
-            "bg_left", 
-            self.aspect2d,
-            -self.getAspectRatio(),
+        # bg_left  = self.create_background(
+        #     "bg_left", 
+        #     self.aspect2d,
+        #     -self.getAspectRatio(),
+        #     0.0,
+        #     self.content_pane_bottom,
+        #     self.content_pane_top,
+        #     (0.1, 0.1, 0.5, 1)
+        # )
+
+        # Load and display the background image on a full-screen quad
+        tex = self.loader.loadTexture("assets/stagno.png")
+        cm  = CardMaker("bg_stagno")
+        cm.setFrame(-self.getAspectRatio(),
             0.0,
             self.content_pane_bottom,
-            self.content_pane_top,
-            (0.1, 0.1, 0.5, 1)
-        )
+            self.content_pane_top)
+        card = self.aspect2d.attachNewNode(cm.generate())
+#        card.setDepthTest(False)
+#        card.setDepthWrite(False)
+#        card.setBin("fixed", 50)
+        card.setTexture(tex)
+
+        bg_left = card
 
         bg_inventory_left  = self.create_background(
             "bg_inventory_left", 
@@ -149,6 +164,21 @@ class Monopoly2d(ShowBase, FSM):
             self.content_pane_top,
             (0.5, 0.1, 0.1, 1)
         )
+
+        # Load and display the background image on a full-screen quad
+        tex = self.loader.loadTexture("assets/forest.png")
+        cm  = CardMaker("bg_forest")
+        cm.setFrame(0.0,
+            self.getAspectRatio(),
+            self.content_pane_bottom,
+            self.content_pane_top)
+        card = self.aspect2d.attachNewNode(cm.generate())
+#        card.setDepthTest(False)
+#        card.setDepthWrite(False)
+#        card.setBin("fixed", 50)
+        card.setTexture(tex)
+
+        bg_right = card
 
         bg_inventory_right  = self.create_background(
             "bg_inventory_right", 
